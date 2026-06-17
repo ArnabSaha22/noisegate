@@ -1,0 +1,30 @@
+# --- Secrets / environment ---
+.env
+.env.*
+*.key
+*.pem
+service-account*.json
+credentials*.json
+
+# --- Python virtual environments ---
+noisegate_venv/
+venv/
+.venv/
+env/
+
+# --- Python caches ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
