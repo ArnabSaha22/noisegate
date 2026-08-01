@@ -5,10 +5,16 @@
 *.pem
 service-account*.json
 credentials*.json
+.logfire/logfire_credentials.json
 .streamlit/secrets.toml
 
 # --- This project's virtual environment ---
 noisegate_venv/
+
+# --- Local-only working docs / diagnostics (not part of the shipped repo) ---
+CLAUDE.md
+Claude_Code_Kickoff.md
+healthcheck.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
