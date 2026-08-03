@@ -1,0 +1,82 @@
+# Builds all three service images in parallel and pushes them to Artifact Registry.
+#
+# Usage:
+#   gcloud builds submit --config cloudbuild.yaml .
+#
+# Local Docker is NOT required -- the build happens on Google's builders.
+#
+# Images are tagged with the short commit SHA *and* 'latest'. Deploying by SHA
+# is what makes a rollback possible; 'latest' exists only as a convenience for
+# manual pulls. terraform's image_tag variable should be set to a SHA for any
+# deploy you might need to undo.
+
+substitutions:
+  _REGION: us-central1
+  _REPO: noisegate-containers
+  # Immutable tag for this build.
+  #
+  # Deliberately NOT the built-in SHORT_SHA, which is populated only for
+  # trigger-based builds. A manual
+  # `gcloud builds submit` leaves it empty, producing an invalid tag like
+  # "backend:" and failing the push. A user-defined substitution can carry a
+  # default, so manual builds work and CI can still pass a real SHA:
+  #
+  #   gcloud builds submit --config cloudbuild.yaml \
+  #     --substitutions=_TAG=$(git rev-parse --short HEAD) .
+  _TAG: manual
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/backend:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/backend:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ingestion:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ingestion:latest'
+
+steps:
+  # waitFor: ['-'] means "do not wait for anything" -- all three builds start
+  # immediately and run concurrently rather than in sequence.
+  - id: build-backend
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - -f
+      - docker/backend.Dockerfile
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/backend:${_TAG}'
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/backend:latest'
+      - .
+
+  - id: build-ui
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - -f
+      - docker/ui.Dockerfile
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:${_TAG}'
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:latest'
+      - .
+
+  - id: build-ingestion
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - -f
+      - docker/ingestion.Dockerfile
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ingestion:${_TAG}'
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ingestion:latest'
+      - .
+
+timeout: 1800s

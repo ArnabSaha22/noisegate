@@ -1,0 +1,62 @@
+# Controls what `gcloud builds submit` uploads as build context.
+#
+# NOTE: this is a DIFFERENT file from .dockerignore, and the distinction costs
+# people real time:
+#
+#   .gcloudignore  -> what gets UPLOADED to Cloud Build
+#   .dockerignore  -> what gets COPIED INTO the image during the build
+#
+# Without this file, gcloud falls back to .gitignore semantics. DATA/ is tracked
+# in git, so every submit uploaded ~104 MB of PDFs that no image ever reads.
+# With this file the context drops to a few hundred KB and submits are fast.
+#
+# IMPORTANT: once this file exists it REPLACES the .gitignore fallback entirely,
+# so anything that must stay out of the upload has to be listed here explicitly
+# -- including secrets.
+
+# --- Secrets: must never leave the machine ---
+.env
+.env.*
+*.tfvars
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+.logfire/
+service-account*.json
+credentials*.json
+
+# --- The corpus: ~104 MB of PDFs. Documents reach the system via GCS,
+#     never through the build context. ---
+DATA/
+
+# --- Local environment ---
+noisegate_venv/
+
+# Node dependencies (71 MB) and the local build output. The Docker build runs
+# `npm ci` from package-lock.json and produces dist/ itself, so uploading either
+# would be dead weight -- and a stale local dist/ could mask a broken build.
+web/node_modules/
+web/dist/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Infrastructure: applied by Terraform, not built into images ---
+terraform/
+.terraform/
+
+# --- Version control & editor state ---
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# --- Local-only docs and diagnostics ---
+docs/
+CLAUDE.md
+Claude_Code_Kickoff.md
+healthcheck.py

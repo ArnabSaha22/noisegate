@@ -1,0 +1,49 @@
+# Keep the build context small and free of anything sensitive.
+# Everything here is uploaded to Cloud Build, so exclusions matter for both
+# speed and secrecy.
+
+# Secrets -- must never enter an image layer
+.env
+.env.*
+*.tfvars
+*.tfstate
+*.tfstate.*
+.logfire/
+service-account*.json
+credentials*.json
+
+# The corpus: ~104 MB of PDFs that the container never reads.
+# Documents reach the running system through GCS, not through the image.
+DATA/
+
+# Local environment
+noisegate_venv/
+
+# Built inside the image by the webbuild stage; never copy the host's copies.
+# A stale local dist/ shipped into the image would silently serve old assets.
+web/node_modules/
+web/dist/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Infrastructure definitions are applied by Terraform, not shipped in images
+terraform/
+.terraform/
+
+# Version control and editor state
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Local-only docs and diagnostics
+docs/
+CLAUDE.md
+Claude_Code_Kickoff.md
+healthcheck.py
+README.md

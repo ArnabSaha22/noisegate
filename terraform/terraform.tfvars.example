@@ -1,0 +1,48 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# Alternatively, keep secrets out of files entirely by exporting them:
+#   export TF_VAR_groq_api_key="..."
+
+project_id = "noisegate-499310"
+region     = "us-central1"
+
+# --- Qdrant (external, not managed by Terraform) ---
+qdrant_url     = "https://YOUR-CLUSTER.us-west-2-0.aws.cloud.qdrant.io:6333"
+qdrant_api_key = "PASTE_YOUR_QDRANT_KEY"
+
+# --- Groq ---
+groq_api_key = "PASTE_YOUR_GROQ_KEY"
+
+# --- Observability (optional but recommended) ---
+logfire_token     = "PASTE_YOUR_LOGFIRE_TOKEN"
+langsmith_api_key = "PASTE_YOUR_LANGSMITH_KEY"
+
+# --- Document AI (needed only for PDF ingestion) ---
+doc_ai_location     = "us"
+doc_ai_processor_id = "PASTE_YOUR_PROCESSOR_ID"
+
+# --- Existing buckets (adopted, never created or destroyed by Terraform) ---
+raw_bucket       = "noisegate-rag-raw"
+processed_bucket = "noisegate-rag-processed"
+
+# ---------------------------------------------------------------------------
+# COST TOGGLES -- both default to false.
+#
+# Left as-is, `terraform apply` deploys three Cloud Run services that scale to
+# zero, so an idle deployment costs approximately nothing. The app runs with
+# LOCAL_MODE=true: RAM-based conversation memory, semantic cache disabled.
+#
+# Turn these on only while you need the full production topology, and turn them
+# back off afterwards -- they bill 24/7 regardless of traffic.
+# ---------------------------------------------------------------------------
+
+# enable_sql  = true          # Cloud SQL Postgres, ~$10/mo. Persistent chat memory.
+# db_password = "SET_A_STRONG_PASSWORD"
+
+# enable_cache = true         # Memorystore + VPC connector, ~$45-55/mo combined.
+
+# --- Image tag ---
+# Prefer a git SHA over "latest" so you can roll back to a known-good build.
+# image_tag = "a1b2c3d"

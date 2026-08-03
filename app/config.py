@@ -13,7 +13,10 @@ class Settings:
     PROCESSED_BUCKET = os.getenv("GCP_PROCESSED_BUCKET", "rag-data-processed")
 
     # --- VECTOR DB (QDRANT) ---
-    QDRANT_URL = os.getenv("QDRAND_ENDPOINT")
+    # Prefer the correctly-spelled name (what CLAUDE.md and scripts/healthcheck.py
+    # expect); fall back to the historical misspelling so existing .env files and
+    # deployed services keep working.
+    QDRANT_URL = os.getenv("QDRANT_CLUSTER_ENDPOINT") or os.getenv("QDRAND_ENDPOINT")
     QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
     QDRANT_COLLECTION = "noisegate_rag"
 
