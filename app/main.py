@@ -184,6 +184,16 @@ def query_stream(request: QueryRequest):
 
             answer_parts: list[str] = []
             sources: list = []
+            # Answer taken from graph STATE rather than from streamed tokens.
+            #
+            # Needed because not every answer comes from an LLM. The relevance
+            # floor makes the responder return a fixed refusal WITHOUT calling
+            # Groq, so no token events are emitted and joining answer_parts
+            # yields "". The non-streaming /query endpoint reads final_answer
+            # off the result and was unaffected, which is why this only showed
+            # up in the streamed path.
+            state_answer: str = ""
+            final_status: str = "Response generated."
 
             # stream_mode=["updates", "messages"] gives BOTH levels at once:
             #   updates  -> whole-node results, for progress reporting
@@ -203,6 +213,10 @@ def query_stream(request: QueryRequest):
                         if update.get("documents"):
                             sources = update["documents"]
                             yield _sse("sources", sources)
+                        if update.get("final_answer"):
+                            state_answer = update["final_answer"]
+                        if update.get("status"):
+                            final_status = update["status"]
 
                 elif mode == "messages":
                     message, meta = chunk
@@ -216,13 +230,25 @@ def query_stream(request: QueryRequest):
                         answer_parts.append(text)
                         yield _sse("token", text)
 
-            answer = "".join(answer_parts)
-            if answer:
+            # Prefer streamed tokens; fall back to whatever the graph put in
+            # state. An answer produced without an LLM has no tokens to stream.
+            answer = "".join(answer_parts) or state_answer
+
+            # Nothing was streamed, so the client has rendered nothing. Emit the
+            # answer as a single token frame, otherwise the UI shows an empty
+            # bubble for every declined question.
+            if answer and not answer_parts:
+                yield _sse("token", answer)
+
+            # Only cache real generated answers. Caching a refusal would make
+            # the system keep refusing a question even after the relevant
+            # document is ingested.
+            if answer_parts:
                 update_cache(q, answer)
 
             yield _sse("done", {
                 "answer": answer,
-                "status": "Response generated.",
+                "status": final_status,
                 "sources": sources,
             })
 
