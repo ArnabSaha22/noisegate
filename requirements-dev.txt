@@ -1,0 +1,8 @@
+# Development and CI dependencies.
+#
+# Kept separate from requirements.txt / requirements-lock.txt so test tooling
+# never ships inside the production container images.
+#
+#   pip install -r requirements-lock.txt -r requirements-dev.txt
+
+pytest>=8.0          # test runner; suite is pure logic, no network

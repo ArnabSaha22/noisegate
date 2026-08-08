@@ -1,0 +1,176 @@
+name: CI
+
+# Runs on every push and PR to main. Deliberately NO secrets: the test suite is
+# pure logic -- no Qdrant, no Vertex, no Groq -- so a fork's PR can run it and a
+# leaked workflow log can never expose a credential.
+#
+# That property is enforced, not assumed: tests/ imports app modules, and the
+# LLM clients are lazily constructed precisely so importing them does not
+# require an API key. If someone reintroduces a module-scope client, this job
+# fails on import and says so.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A new push supersedes an in-flight run on the same ref.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is what the venv, both Dockerfiles and Cloud Run all use.
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install dependencies
+        # requirements-lock.txt, not requirements.txt: the loose file pins only
+        # 3 of 40 packages, so CI would test against whatever PyPI served today
+        # rather than the versions that actually ship in the images.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Check the suite needs no secrets
+        # Belt and braces. The step above already runs without secrets, but this
+        # makes the guarantee explicit and fails loudly if a test starts
+        # reaching for a live service.
+        env:
+          GROQ_API_KEY: ""
+          QDRANT_API_KEY: ""
+          QDRANT_CLUSTER_ENDPOINT: ""
+          LOGFIRE_TOKEN: ""
+          LANGSMITH_TRACING: "false"
+        run: pytest -q
+
+  lint:
+    name: Syntax and config sanity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Every Python file compiles
+        run: python -m compileall -q app ui scripts tests
+
+      - name: YAML files parse
+        run: |
+          pip install pyyaml
+          python - <<'PY'
+          import sys, yaml, pathlib
+          bad = []
+          for p in ["cloudbuild.yaml", "eval/golden_set.yaml", ".github/workflows/ci.yml"]:
+              try:
+                  yaml.safe_load(pathlib.Path(p).read_text())
+                  print(f"ok   {p}")
+              except Exception as e:
+                  bad.append(f"{p}: {e}")
+          if bad:
+              print("\n".join(bad)); sys.exit(1)
+          PY
+
+      - name: Golden set is well formed
+        # A malformed golden set would make evaluate.py silently measure the
+        # wrong thing, which is worse than failing outright.
+        run: |
+          python - <<'PY'
+          import sys, yaml, pathlib
+          data = yaml.safe_load(pathlib.Path("eval/golden_set.yaml").read_text())
+          qs = data["questions"]
+          ids = [q["id"] for q in qs]
+          errs = []
+          if len(ids) != len(set(ids)):
+              errs.append("duplicate question ids")
+          for q in qs:
+              if not q.get("question"):
+                  errs.append(f"{q.get('id')}: empty question")
+              if "expect" not in q:
+                  errs.append(f"{q.get('id')}: missing 'expect' (use [] for out-of-domain)")
+          if errs:
+              print("\n".join(errs)); sys.exit(1)
+          ood = sum(1 for q in qs if not q["expect"])
+          print(f"ok   {len(qs)} questions ({ood} out-of-domain), ids unique")
+          PY
+
+  secrets:
+    name: No secrets committed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan tracked files for credentials
+        # This project has leaked a credential twice: a Logfire token in
+        # .logfire/, and four API keys inside a committed terraform plan file.
+        #
+        # The second one slipped past a manual review because `tfplan` is a
+        # binary ZIP and the check only grepped text. So this scans EVERY tracked
+        # file's bytes, and separately refuses file types that are known to embed
+        # resolved secrets.
+        run: |
+          python - <<'PY'
+          import re, subprocess, sys, pathlib
+
+          PATTERNS = {
+              "Logfire token":   rb"pylf_v\d_[a-z]+_[A-Za-z0-9]{20,}",
+              "Groq key":        rb"gsk_[A-Za-z0-9]{40,}",
+              "LangSmith key":   rb"lsv2_(pt|sk)_[A-Za-z0-9]{20,}",
+              "Google API key":  rb"AIza[0-9A-Za-z_\-]{35}",
+              "JWT":             rb"eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.",
+              "Private key":     rb"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----",
+          }
+          # Files that embed resolved variable values and must never be tracked.
+          FORBIDDEN = re.compile(r"(^|/)(tfplan|.*\.tfplan|.*\.tfstate|.*\.tfvars|\.env)$")
+
+          files = subprocess.check_output(["git", "ls-files"], text=True).split("\n")
+          findings = []
+
+          for f in filter(None, files):
+              if FORBIDDEN.search(f) and not f.endswith(".tfvars.example"):
+                  findings.append(f"{f}: file type embeds secrets and must not be tracked")
+                  continue
+              p = pathlib.Path(f)
+              if not p.is_file() or p.stat().st_size > 5_000_000:
+                  continue
+              blob = p.read_bytes()          # bytes, so binary files are scanned too
+              for name, pat in PATTERNS.items():
+                  if re.search(pat, blob):
+                      findings.append(f"{f}: possible {name}")
+
+          if findings:
+              print("SECRETS DETECTED IN TRACKED FILES:")
+              print("\n".join(f"  {x}" for x in findings))
+              sys.exit(1)
+          print(f"ok   scanned {sum(1 for f in files if f)} tracked files, nothing found")
+          PY

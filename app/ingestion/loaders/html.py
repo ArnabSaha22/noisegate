@@ -18,10 +18,22 @@ def parse_html(file_path:str):
             # Extract text
             text=soup.get_text(separator="\n")
 
-            # Clean Whitespace
-            lines=(line.strip() for line in text.splitlines())
-            chunks=(phrase.strip() for line in lines for phrase in line.split(" "))
-            text_clean='\n'.join(chunk for chunk in chunks if chunk)
+            # Clean whitespace.
+            #
+            # NOTE the double space in split("  "). This is the standard
+            # BeautifulSoup whitespace-cleanup idiom, and splitting on a SINGLE
+            # space instead breaks it completely: every word becomes its own
+            # element and the join below puts each on its own line. That is
+            # exactly what happened here -- both HTML documents were indexed at
+            # ~5 characters per line ("A\nHands-On\nGuide\nto\nKubernetes"),
+            # against ~30-55 for the correctly parsed formats.
+            #
+            # The damage is quiet: the text is all still present, so nothing
+            # errors and the character count looks right. It only shows up if
+            # you measure line length, or read a retrieved passage.
+            lines = (line.strip() for line in text.splitlines())
+            phrases = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text_clean = "\n".join(p for p in phrases if p)
 
             return text_clean
         

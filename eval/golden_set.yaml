@@ -1,0 +1,162 @@
+# Golden set for retrieval evaluation.
+#
+# Each entry is a question plus the document(s) that genuinely answer it. The
+# retriever is scored on whether it surfaces one of those documents.
+#
+# HOW THESE WERE WRITTEN
+# Every question is grounded in text actually present in the indexed corpus --
+# they were written after reading the extracted content, not invented from the
+# filenames. Questions are phrased the way a user would ask, deliberately NOT
+# reusing the document's own wording, so this measures semantic retrieval rather
+# than keyword overlap.
+#
+# A CAVEAT WORTH KEEPING
+# These were drafted by the same assistant that built and fixed the retrieval
+# pipeline, which is a real bias: it is easy to unconsciously write questions the
+# system already handles. Treat this as a starting baseline, not an independent
+# audit. The most valuable thing you can do is add your own questions --
+# especially ones you expect it to get WRONG.
+#
+# DISAMBIGUATION NOTE
+# job_management.html is about DATABRICKS jobs; the other five documents are
+# Kubernetes. Bare questions about "jobs" are genuinely ambiguous across them, so
+# questions here name the platform explicitly. That tests retrieval rather than
+# punishing it for a question with two defensible answers.
+#
+# `expect: []` means nothing in the corpus should answer it. Those measure
+# whether the system knows when to stay quiet -- see the relevance-floor gap.
+
+questions:
+  # ---------------------------------------------------------------- architecture
+  - id: arch-master-components
+    question: Which components run on the Kubernetes control plane?
+    expect: [architecture.pptx]
+
+  - id: arch-etcd
+    question: Where does a Kubernetes cluster store its state?
+    expect: [architecture.pptx]
+
+  - id: arch-pod-networking
+    question: Can pods talk to each other directly without network address translation?
+    expect: [architecture.pptx]
+
+  - id: arch-service-vs-ingress
+    question: What is the difference between exposing a service internally and exposing it to the outside world?
+    expect: [architecture.pptx]
+
+  - id: arch-rbac-subjects
+    question: What kinds of subject can a role binding be attached to?
+    expect: [architecture.pptx]
+
+  # -------------------------------------------------------------------- cronjobs
+  - id: cron-restart-policy
+    question: Why can't a batch task use the "Always" restart policy?
+    expect: [cronjobs.docx]
+
+  - id: cron-api-group
+    question: Which API group do batch workloads belong to?
+    expect: [cronjobs.docx]
+
+  - id: cron-immutable-template
+    question: Can I edit the pod template of a job after it has been created?
+    expect: [cronjobs.docx]
+
+  - id: cron-security-context
+    question: How do I stop a batch container from running as root?
+    expect: [cronjobs.docx]
+
+  - id: cron-parallelism-field
+    question: Which field controls how many pods a job runs at once?
+    expect: [cronjobs.docx, architecture.pptx]
+    note: architecture.pptx also mentions spec.parallelism, so either is defensible.
+
+  # --------------------------------------------------------- databricks (not k8s)
+  - id: dbx-cli-get-job
+    question: Which Databricks CLI command prints the details of one job?
+    expect: [job_management.html]
+
+  - id: dbx-python-sdk
+    question: How do I create a Databricks job from Python?
+    expect: [job_management.html]
+
+  - id: dbx-rest-api
+    question: How do I call the Databricks jobs REST API with curl?
+    expect: [job_management.html]
+
+  - id: dbx-job-as-code
+    question: Can I see an existing Databricks job as YAML or Python?
+    expect: [job_management.html]
+
+  # ---------------------------------------------------------------- monitor_job
+  - id: mon-check-status
+    question: How can I monitor the status of a running job?
+    expect: [monitor_job.docx]
+
+  - id: mon-completions-column
+    question: What does the COMPLETIONS column mean when listing jobs?
+    expect: [monitor_job.docx]
+
+  - id: mon-failed-pod-logs
+    question: My batch task keeps failing. How do I read the logs of the pods that failed?
+    expect: [monitor_job.docx]
+
+  - id: mon-backoff-limit
+    question: How many times will Kubernetes retry a failing job before giving up?
+    expect: [monitor_job.docx, cronjobs.docx]
+    note: backoffLimit appears in both; either is a correct retrieval.
+
+  - id: mon-jsonpath
+    question: How do I extract just one field from kubectl output instead of the whole object?
+    expect: [monitor_job.docx]
+
+  # ------------------------------------------------------------ work queue (txt)
+  - id: wq-redis-queue
+    question: How do I set up a queue that worker pods pull tasks from?
+    expect: [parallel_work_queue.txt]
+
+  - id: wq-worker-exit
+    question: How does a worker know there is no work left to do?
+    expect: [parallel_work_queue.txt]
+
+  - id: wq-lease
+    question: What stops two workers from processing the same queue item?
+    expect: [parallel_work_queue.txt]
+
+  # ------------------------------------------------------------------ autoscaling
+  - id: hpa-cpu
+    question: How do I automatically scale the number of pods based on CPU usage?
+    expect: [pods_autoscale.html]
+
+  - id: vpa-vs-hpa
+    question: What is the difference between scaling pod count and adjusting a pod's resource requests?
+    expect: [pods_autoscale.html]
+
+  - id: vpa-modes
+    question: Can the autoscaler change resource requests on pods that are already running?
+    expect: [pods_autoscale.html]
+
+  - id: hpa-metrics-source
+    question: Where does the horizontal autoscaler get its metrics from?
+    expect: [pods_autoscale.html, architecture.pptx]
+    note: architecture.pptx names Heapster as the metrics collector used by HPA.
+
+  # ------------------------------------------------- out of domain (expect: none)
+  # Nothing in the corpus answers these. Vector search will still return its
+  # nearest neighbours, so these measure whether the system can decline.
+  - id: ood-cookies
+    question: What is the best recipe for chocolate chip cookies?
+    expect: []
+
+  - id: ood-tax
+    question: How do I file a self-assessment tax return in the United Kingdom?
+    expect: []
+
+  - id: ood-guitar
+    question: What is the standard tuning for a six string guitar?
+    expect: []
+
+  - id: ood-plausible
+    question: How do I configure a Kafka consumer group to rebalance partitions?
+    expect: []
+    note: Deliberately adjacent to the domain -- plausible infrastructure jargon
+          with no supporting document. Harder than the obviously silly ones.
